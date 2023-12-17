@@ -1,0 +1,187 @@
+"Componente TS de carrito de compras"
+
+import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Router } from '@angular/router';
+import { DbservicioService } from 'src/app/services/dbservicio.service';
+import { AlertController } from '@ionic/angular';
+import { BehaviorSubject, async } from 'rxjs';
+import { Haptics } from '@capacitor/haptics';
+
+@Component({
+  selector: 'app-carrito',
+  templateUrl: './carrito.page.html',
+  styleUrls: ['./carrito.page.scss'],
+})
+export class CarritoPage implements OnInit {
+  carrito: BehaviorSubject<any[]> = new BehaviorSubject<any[]>([]);
+
+  constructor(private alertController: AlertController, private router: Router, private db: DbservicioService) { }
+
+  ngOnInit() {
+    //Obtener el carrito inicial y actualizar el observable
+    const usuarioId = localStorage.getItem('user_id');
+    if (usuarioId) {
+      this.db.buscarCarrito(usuarioId)
+        .then(items => {
+          this.carrito.next(items);
+        })
+        .catch(error => {
+          console.error('Error al buscar el carrito desde la base de datos: ', error);
+        });
+    } else {
+      console.error('ID de usuario no encontrado en el localStorage.');
+    }
+  }
+
+  //Aumentar cantidad del producto en el carrito
+  aumentarCantidad(idProducto: any, cantidad: number, precio: number, stock: number) {
+    console.log('Incrementando la cantidad...');
+    if (cantidad < stock) {
+      //Sumar un producto
+      cantidad++;
+      //Calcula el nuevo subtotal
+      const nuevoSubtotal = precio * cantidad;
+      this.modificarCarrito(idProducto, cantidad, nuevoSubtotal);
+      console.log('Cantidad incrementada: ', cantidad);
+    }
+  }
+
+  //Disminuir cantidad del producto en el carrito
+  disminuirCantidad(idProducto: any, cantidad: number, precio: number, subtotal: number) {
+    console.log('Disminuyendo la cantidad...');
+    if (cantidad > 1) {
+      //Restar un producto
+      cantidad--;
+      //Calcula el nuevo subtotal
+      const nuevoSubtotal = subtotal - precio;
+      this.modificarCarrito(idProducto, cantidad, nuevoSubtotal);
+      console.log('Cantidad disminuida: ', cantidad);
+    }
+  }
+
+  //Eliminar producto del carrito
+  eliminarProducto(id_producto: any) {
+    this.db.eliminarProductoCarrito(id_producto);
+
+    //Actualiza el observable eliminando el producto del carrito
+    const updatedCarrito = this.carrito.value.filter(item => item.id_producto !== id_producto);
+    this.carrito.next(updatedCarrito);
+  }
+
+  modificarCarrito(idProducto: any, nuevaCantidad: number, subtotal: number) {
+    const usuarioId = localStorage.getItem('user_id');
+
+    if (!idProducto || nuevaCantidad <= 0) {
+      console.error('Valores inválidos para modificar la cantidad.');
+      return;
+    }
+
+    console.log('Id del producto a modificar: ', idProducto);
+    console.log('Nueva cantidad: ', nuevaCantidad);
+
+    //Llama directamente a la función para modificar el carrito en la base de datos.
+    this.db.modificarCarrito(nuevaCantidad, subtotal, idProducto, usuarioId);
+
+    //Actualiza el observable con los cambios
+    const updatedCarrito = this.carrito.value.map(item => {
+      if (item.id_producto === idProducto) {
+        return { ...item, cantidad: nuevaCantidad, subtotal: subtotal };
+      }
+      return item;
+    });
+    this.carrito.next(updatedCarrito);
+  }
+
+
+  comprar() {
+    //Obtener el id del usuario
+    const usuarioId = this.carrito.value[0].id_usuario;
+
+    if (!usuarioId) {
+      console.error('ID de usuario no encontrado en el carrito.');
+      return;
+    }
+
+    //Obtener la fecha actual
+    const fechaVenta = new Date().toISOString();
+
+    //Crear un objeto de venta
+    const venta = {
+      fechaVenta,
+      nombreProducto: "",
+      subtotal: 0,
+      id_usuario: usuarioId,
+    };
+
+    for (const item of this.carrito.value) {
+      //Obtener la cantidad y el id del producto del carrito
+      const cantidadComprada = item.cantidad;
+      const idProducto = item.id_producto;
+
+      //Calcula el nuevo stock restando la cantidad comprada al stock actual
+      const nuevoStock = item.producto.stock - cantidadComprada;
+
+      //Actualiza el stock del producto en la base de datos
+      this.db.actualizarStockProducto(idProducto, nuevoStock)
+        .then(() => {
+          console.log('Stock de productos actualizado con éxito.');
+        })
+        .catch(error => {
+          console.error('Error al actualizar el stock de productos: ', error);
+        });
+
+      //Agregar una actualización de stock a la lista
+      venta.subtotal += item.subtotal;
+      venta.nombreProducto += `${item.producto.nombreProducto} - Subtotal: $${item.subtotal}    `;
+    }
+
+    //Almacenar la venta en la base de datos
+    this.db.almacenarVenta(venta.fechaVenta, venta.nombreProducto, venta.subtotal, venta.id_usuario)
+      .then(() => {
+        console.log('Venta almacenada con éxito.');
+        console.log('Datos de la venta:', venta);
+
+        Haptics.vibrate({ duration: 2000 });
+
+        //Ahora que la venta se ha completado y los productos se han actualizado
+        //Elimina el carrito del usuario y actualiza el observable con un carrito vacío
+        this.db.eliminarCarritoUsuario(venta.id_usuario)
+          .then(() => {
+            console.log('Carrito del usuario eliminado con éxito.');
+
+            //Actualiza el observable con un carrito vacío
+            this.carrito.next([]);
+
+            //Mostrar el recibo de la última venta
+            this.mostrarReciboVenta();
+          })
+          .catch(error => {
+            console.error('Error al eliminar el carrito del usuario: ', error);
+          });
+      })
+      .catch(error => {
+        console.error('Error al almacenar la venta: ', error);
+      });
+  }
+
+  //Mostrar el recibo de la venta
+  mostrarReciboVenta() {
+    this.db.obtenerUltimaVenta()
+      .then(venta => {
+        if (venta) {
+          // Mensaje del recibo con los datos de la venta
+          const recibo = `Fecha de Venta: ${venta.fechaVenta}  Productos: ${venta.nombreProducto}  Total: $${venta.subtotal}`;
+
+          //Alerta con el recibo
+          this.alertController.create({
+            header: 'Recibo de Venta',
+            message: recibo,
+            buttons: ['OK']
+          }).then(alert => alert.present());
+        }
+      })
+      .catch(error => {
+        console.error('Error al obtener los datos de la última venta: ', error);
+      });
+  }
+}

@@ -1,0 +1,135 @@
+"Servicios de base de datos para venta de productos y carrito de compra"
+
+//Buscar en el carrito
+  buscarCarrito(user_id: any) {
+    return this.dataBase.executeSql('SELECT carrito.*, producto.* FROM carrito ' +
+      'INNER JOIN producto ON carrito.id_producto = producto.id_producto ' +
+      'WHERE carrito.id_usuario = ?', [user_id])
+      .then(res => {
+        let items: any[] = [];
+
+        if (res.rows.length > 0) {
+          for (let i = 0; i < res.rows.length; i++) {
+            items.push({
+              id_carrito: res.rows.item(i).id_carrito,
+              cantidad: res.rows.item(i).cantidad,
+              subtotal: res.rows.item(i).subtotal,
+              id_producto: res.rows.item(i).id_producto,
+              id_usuario: res.rows.item(i).id_usuario,
+              producto: {
+                id_producto: res.rows.item(i).id_producto,
+                img_producto: res.rows.item(i).img_producto,
+                nombreProducto: res.rows.item(i).nombre,
+                precio: res.rows.item(i).precio,
+                stock: res.rows.item(i).stock
+              }
+            });
+          }
+        }
+        // Actualizar el observable
+        this.listaCarrito.next(items as any);
+        return items;  // Puedes retornar los items
+      })
+      .catch(error => {
+        console.error('Error al buscar el carrito del usuario: ', error);
+        return [];
+      });
+  }
+
+  //Agregar al carrito
+  agregarCarrito(id_carrito: any, cantidad: any, subtotal: any, id_producto: any, id_usuario: any) {
+    return this.dataBase.executeSql('INSERT INTO carrito ( id_carrito, cantidad, subtotal, id_producto, id_usuario) VALUES (?,?,?,?,?)', [id_carrito, cantidad, subtotal, id_producto, id_usuario]).then(res => {
+      //Actualizar el observable
+      this.buscarCarrito(id_usuario);
+    }).catch(e => {
+      this.presentAlert("Error al agregar producto: " + e);
+    })
+  }
+
+  //Modificar carrito
+  modificarCarrito(cantidad: any, subtotal: any, id_producto: any, id_usuario: any) {
+    return this.dataBase.executeSql('UPDATE carrito SET cantidad = ?, subtotal = ? WHERE id_producto = ? and id_usuario = ?', [cantidad, subtotal, id_producto, id_usuario]).then(res => {
+      //Actualizo el observable
+      this.buscarCarrito(id_usuario);
+    }).catch(e => {
+      this.presentAlert("Error al modificar producto: " + e);
+    })
+  }
+
+  //Eliminar un producto del carrito
+  eliminarProductoCarrito(id_producto: any) {
+    return this.dataBase.executeSql('DELETE FROM carrito WHERE id_producto = ?', [id_producto])
+      .then(res => {
+        // Actualiza el observable del carrito después de eliminar el producto.
+        this.buscarCarrito(id_producto);
+      })
+      .catch(e => {
+        this.presentAlert("Error al eliminar producto: " + e);
+      });
+  }
+
+  //Eliminar un producto del carrito
+  eliminarCarritoUsuario(id_usuario: any) {
+    return this.dataBase.executeSql('DELETE FROM carrito WHERE id_usuario = ?', [id_usuario])
+      .then(res => {
+        // Actualiza el observable del carrito después de eliminar todos los productos del usuario
+        this.buscarCarrito(id_usuario);
+      })
+      .catch(e => {
+        this.presentAlert("Error al eliminar carrito del usuario: " + e);
+      });
+  }
+
+  ////////////////////////////////////////////////////////////////////// CONSULTAS VENTAS ////////////////////////////////////////////////////////////
+
+  //Buscar ventas
+  buscarVentas() {
+    return this.dataBase.executeSql('SELECT * FROM venta', []).then(res => {
+      // Variable para guardar el resultado de la consulta
+      let items: Venta[] = [];
+
+      // Validar la cantidad de registros devueltos
+      if (res.rows.length > 0) {
+        // Recorriendo las ventas
+        for (let i = 0; i < res.rows.length; i++) {
+          items.push({
+            id_venta: res.rows.item(i).id_venta,
+            fechaVenta: res.rows.item(i).fechaVenta,
+            nombreProducto: res.rows.item(i).nombreProducto,
+            subtotal: res.rows.item(i).subtotal,
+            id_usuario: res.rows.item(i).id_usuario
+          });
+        }
+      }
+      this.listaVentas.next(items as any);
+    }).catch(e => {
+      this.presentAlert("Error al buscar ventas: " + e);
+    });
+  }
+
+  //Almacenar venta
+  almacenarVenta(fechaVenta: any, nombreProducto: any, subtotal: any, id_usuario: any) {
+    return this.dataBase.executeSql('INSERT INTO venta (fechaVenta, nombreProducto, subtotal, id_usuario) VALUES (?,?,?,?)', [fechaVenta, nombreProducto, subtotal, id_usuario]).then(res => {
+      //Actualizar el observable
+      this.buscarVentas();
+    }).catch(e => {
+      this.presentAlert("Error al agregar producto: " + e);
+    })
+  }
+
+  //Obtener venta
+  obtenerUltimaVenta() {
+    return this.dataBase.executeSql('SELECT * FROM venta ORDER BY id_venta DESC LIMIT 1', [])
+      .then(result => {
+        if (result.rows.length > 0) {
+          const venta = result.rows.item(0);
+          return venta;
+        } else {
+          return null; //No se encontraron ventas
+        }
+      })
+      .catch(error => {
+        console.error('Error al obtener la última venta: ', error);
+        throw error; //Manejar el error o pasarlo a la función que lo llama
+      });
+  }

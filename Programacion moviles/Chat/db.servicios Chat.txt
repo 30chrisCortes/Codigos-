@@ -1,0 +1,112 @@
+"Servicios de base de datos con sqlite para chatear"
+
+/* Chat */
+  fetchChat(): Observable<CHAT[]> {
+    return this.listaChat.asObservable();
+  }
+  buscarChat() {
+    return this.database.executeSql('SELECT * FROM CHAT', []).then(res => {
+      let items: CHAT[] = [];
+      if (res.rows.length > 0) {
+        for (var i = 0; i < res.rows.length; i++) {
+          items.push({
+            id_chat: res.rows.item(i).ID_CHAT,
+            id_remitente: res.rows.item(i).ID_REMITENTE,
+            id_destinatario: res.rows.item(i).ID_DESTINATARIO,
+          })
+        }
+      }
+      this.listaChat.next(items as any);
+    })
+  }
+  obtenerUsuariosParaChat(user_id: any) {
+    return this.database.executeSql(`
+      SELECT U.ID_USUARIO, C.ID_CHAT, U.IMG_USUARIO, U.NOMBRE_USUARIO
+      FROM CHAT C
+      JOIN USUARIO U ON (C.ID_REMITENTE = U.ID_USUARIO OR C.ID_DESTINATARIO = U.ID_USUARIO)
+      WHERE (C.ID_REMITENTE = ? OR C.ID_DESTINATARIO = ?) AND U.ID_USUARIO != ?
+    `, [user_id, user_id, user_id])
+    .then(data => {
+      const usuarios = [];
+      for (let i = 0; i < data.rows.length; i++) {
+        usuarios.push({
+          id_usuario: data.rows.item(i).ID_USUARIO,
+          id_chat: data.rows.item(i).ID_CHAT,
+          img_usuario: data.rows.item(i).IMG_USUARIO,
+          nombre_usuario: data.rows.item(i).NOMBRE_USUARIO,
+        });
+      }
+      console.log('Usuarios para chat:', usuarios);
+      return usuarios;
+    });
+  }         
+  eliminarChat(id_chat: any) {
+    return this.database.executeSql('DELETE FROM CHAT WHERE id_chat = ?', [id_chat]).then(res => {
+      //llamar funcion creada anteriormente
+      this.buscarChat();
+    })
+  }
+  agregarChat(id_remitente: any, id_destinatario: any) {
+    return this.database.executeSql('INSERT INTO CHAT (ID_REMITENTE, ID_DESTINATARIO) VALUES (?, ?)', [id_remitente, id_destinatario]).then(res => {
+      this.buscarChat();
+    })
+  }
+  /* MENSAJES */
+  fetchMensajes(): Observable<MENSAJES[]> {
+    return this.listaLikes.asObservable();
+  }
+  buscarMensajes() {
+    return this.database.executeSql('SELECT * FROM MENSAJES', []).then(res => {
+      let items: MENSAJES[] = [];
+      if (res.rows.length > 0) {
+        for (var i = 0; i < res.rows.length; i++) {
+          items.push({
+            id_mensaje: res.rows.item(i).ID_CHAT,
+            mensaje: res.rows.item(i).IMG_CHAT,
+            id_usuario: res.rows.item(i).ID_USUARIO,
+            id_chat: res.rows.item(i).ID_CHAT
+          })
+        }
+      }
+      this.listaMensajes.next(items as any);
+    })
+  }
+  agregarMensaje(mensaje: string, id_usuario: any, id_chat: any) {
+    return this.database.executeSql('INSERT INTO MENSAJES (MENSAJE, ID_USUARIO, ID_CHAT) VALUES (?, ?, ?)', [mensaje, id_usuario, id_chat]);
+  }
+  obtenerMensajesPorChat(idChat: any) {
+    return this.database.executeSql('SELECT * FROM MENSAJES WHERE ID_CHAT = ?', [idChat]).then(data => {
+      const mensajes = [];
+      for (let i = 0; i < data.rows.length; i++) {
+        mensajes.push({
+          id_mensaje: data.rows.item(i).ID_MENSAJE,
+          mensaje: data.rows.item(i).MENSAJE,
+          id_usuario: data.rows.item(i).ID_USUARIO,
+          id_chat: data.rows.item(i).ID_CHAT,
+        });
+      }
+      return mensajes;
+    });
+  }
+  obtenerUsuarioPorIdChat(idChat: any, idUsuario: any) {
+    return this.database.executeSql(`
+      SELECT U.ID_USUARIO, U.IMG_USUARIO, U.NOMBRE_USUARIO
+      FROM CHAT C
+      JOIN USUARIO U ON (C.ID_REMITENTE = U.ID_USUARIO OR C.ID_DESTINATARIO = U.ID_USUARIO)
+      WHERE (C.ID_CHAT = ?) AND (U.ID_USUARIO = ?)
+    `, [idChat, idUsuario])
+    .then(data => {
+      if (data.rows.length > 0) {
+        const usuario = {
+          id_usuario: data.rows.item(0).ID_USUARIO,
+          img_usuario: data.rows.item(0).IMG_USUARIO,
+          nombre_usuario: data.rows.item(0).NOMBRE_USUARIO,
+        };
+        console.log('Usuario por ID de Chat:', usuario);
+        return usuario;
+      } else {
+        console.log('No se encontró usuario para el ID de Chat y Usuario:', idChat, idUsuario);
+        return null;
+      }
+    });
+  }

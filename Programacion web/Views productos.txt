@@ -1,0 +1,125 @@
+"Administracion inventario para tienda con Django"
+
+@login_required
+def productos(request, category_id = None):
+    categories = Category.objects.all()
+    if category_id:
+        category = Category.objects.get(idCategory=category_id)
+        productos = Product.objects.filter(idCategory=category)
+    else:
+        productos = Product.objects.all()
+    context = {
+        "productos": productos,
+        "categories": categories
+        }
+    return render(request,'core/tienda/productos.html', context)
+
+@login_required
+def producto(request, producto_id):
+    usuario = request.user.accounts
+    producto = get_object_or_404(Product, pk=producto_id)
+    comentarios = Comments.objects.filter(idProduct=producto_id)
+    context = {
+        "usuario" : usuario,
+        "producto": producto,
+        "comentarios" : comentarios
+    }
+    return render(request,'core/tienda/producto.html', context)
+
+@login_required
+@staff_member_required
+def add_product(request):
+    usuario = request.user.accounts
+    categories = Category.objects.all()
+    context = {
+        "categories": categories,
+        "usuario": usuario
+        }
+    return render(request,'core/admin/add_product.html', context)
+
+""" Vista formulario agregar producto """
+@login_required
+@staff_member_required
+def formAgreProd(request):
+    vImg = request.FILES['imgProd']
+    vCategory = request.POST['category']
+    vNameProduct = request.POST['nomProd']
+    vDescription = request.POST['desProd']
+    vPrice = request.POST['valProd']
+    vStock = request.POST['stockProduct']
+    vDiscProducto = request.POST['discProduct']
+
+    vCategoryProduct = Category.objects.get(idCategory = vCategory)
+    
+    Product.objects.create(
+        productImg = vImg, 
+        idCategory = vCategoryProduct, 
+        productName = vNameProduct, 
+        productDesc = vDescription, 
+        productValue = vPrice, 
+        productStock = vStock, 
+        productDiscount = vDiscProducto
+        )
+    return redirect('add_product')
+
+@login_required
+@staff_member_required
+def mod_productos(request):
+    productos = Product.objects.all()
+    context = {"productos": productos}
+    return render(request,'core/admin/mod_productos.html', context)
+
+""" Vista formulario modificar producto """
+@login_required
+@staff_member_required
+def modificarProducto(request, id):
+    if request.method == 'POST':
+        vProduct = request.POST.get('imputValProd')
+        vStock = request.POST.get('imputStock')
+        vDescuento = request.POST.get('inputDescuent')
+        vImg = request.FILES.get('imgProd')
+
+        producto = Product.objects.get(idProduct=id)
+
+        try:
+            if vProduct:
+                product_value = int(vProduct)
+                if product_value < 0:
+                    raise ValidationError("Ingrese un valor valido.")
+                producto.productValue = product_value
+
+            if vStock:
+                product_stock = int(vStock)
+                if product_stock < 0:
+                    raise ValidationError("Ingrese un valor valido.")
+                producto.productStock = product_stock
+
+            if vDescuento:
+                product_discount = int(vDescuento)
+                if product_discount < 0:
+                    raise ValidationError("Ingrese un valor valido.")
+                producto.productDiscount = product_discount
+
+            if vImg:
+                producto.productImg = vImg
+
+            producto.save()
+            return redirect('mod_productos')
+        
+        except ValidationError as e:
+            productos = Product.objects.all()
+            error_message = str(e.message)
+            context = {
+                "productos": productos,
+                "error_message": error_message
+            }
+            return render(request, 'core/admin/mod_productos.html', context)
+    return redirect('mod_productos')
+
+""" Eliminar producto """
+@login_required
+@staff_member_required
+def EliminarProducto(request, id):
+    producto = Product.objects.get(idProduct=id)
+    producto.delete()
+    return redirect('mod_productos')

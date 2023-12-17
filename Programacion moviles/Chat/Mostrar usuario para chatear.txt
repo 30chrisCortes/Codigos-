@@ -1,0 +1,70 @@
+"Componente TS para mostar usuario con los cuales se puede chatear"
+
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { InfiniteScrollCustomEvent, NavController } from '@ionic/angular';
+import { DbService } from 'src/app/services/db.service';
+
+@Component({
+  selector: 'app-chat',
+  templateUrl: './chat.page.html',
+  styleUrls: ['./chat.page.scss'],
+})
+export class ChatPage implements OnInit {
+
+  items: string[] = [];
+
+  selectedItem: string | undefined; 
+
+  /* Molde usuario */
+  arregloChat: any = [
+    {
+      id_usuario: '',
+      id_chat: '',
+      img_usuario: '',
+      nombre_usuario: '',
+    }
+  ]
+
+  rol_id: any;
+
+  constructor(private navCtrl: NavController, private db: DbService, private router: Router) { }
+
+  ngOnInit() {
+    this.rol_id = localStorage.getItem('rol_id');
+    this.db.dbState().subscribe(res => {
+      if (res) {
+        const user_id = localStorage.getItem('user_id');
+        if (user_id) {
+          this.db.obtenerUsuariosParaChat(user_id).then(usuarios => {
+            this.arregloChat = usuarios;
+            console.log('Arreglo de chat:', this.arregloChat);
+          });
+        }
+      }
+    })
+    this.generateItems();
+  }
+
+  goTo(page: string) {
+    this.router.navigateByUrl(page);
+  }
+
+  private generateItems() {
+    const count = this.items.length + 1;
+    for (let i = 0; i < 50; i++) {
+      this.items.push(`Item ${count + i}`);
+    }
+  }
+
+  onIonInfinite(ev: any) {
+    this.generateItems();
+    setTimeout(() => {
+      (ev as InfiniteScrollCustomEvent).target.complete();
+    }, 500);
+  }
+
+  verDetalle(idUsuario: any, idChat: any) {
+    this.router.navigate(['/inbox', idChat, idUsuario]);
+  }
+}

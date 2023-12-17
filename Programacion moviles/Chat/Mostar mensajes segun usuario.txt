@@ -1,0 +1,62 @@
+"Componente TS para mostar mensajes y enviar segun usuario"
+
+import { Component, OnInit } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { DbService } from 'src/app/services/db.service';
+
+@Component({
+  selector: 'app-inbox',
+  templateUrl: './inbox.page.html',
+  styleUrls: ['./inbox.page.scss'],
+})
+export class InboxPage implements OnInit {
+
+  mensajes: any;
+  idChatSeleccionado: any;
+  usuarioChat: any; 
+  usuario: any;
+  mensaje: string = '';
+
+  constructor(private db: DbService, private route: ActivatedRoute) { }
+
+  ngOnInit() {
+    this.route.paramMap.subscribe(params => {
+      this.usuario = params.get('idUsuario'); 
+      this.idChatSeleccionado = params.get('idChat');
+      if (this.idChatSeleccionado && this.usuario) {
+        this.cargarMensajes();
+        this.cargarUsuarioChat(this.idChatSeleccionado, this.usuario);
+      }
+    });
+  }
+  
+  cargarMensajes() {
+    this.db.obtenerMensajesPorChat(this.idChatSeleccionado).then(mensajes => {
+      this.mensajes = mensajes;
+    }).catch(error => {
+      console.error('Error al obtener mensajes por chat:', error);
+    });
+  }
+  
+  cargarUsuarioChat(idChat: any, idUsuario: any) {
+    this.db.obtenerUsuarioPorIdChat(idChat, idUsuario).then(usuario => {
+      this.usuarioChat = usuario;
+    });
+  }
+    
+  enviarMensaje() {
+    const user_id = localStorage.getItem('user_id');
+    const idChat = this.idChatSeleccionado;
+
+    if (user_id && idChat) {
+      this.db.agregarMensaje(this.mensaje, user_id, idChat).then(() => {
+        this.cargarMensajes();
+        this.mensaje = '';
+      }).catch(error => {
+        console.error('Error al enviar mensaje:', error);
+      });
+    } else {
+      console.error('user_id o idChat es nulo.');
+    }
+  }
+}
